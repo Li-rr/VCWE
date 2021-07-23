@@ -4,7 +4,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 import argparse
+import sys
+from PIL import Image
+from scipy import misc
+from torchsummary import summary
 
+
+from utils import id2word
 from data_reader import DataReader, Word2vecDataset
 from model import VCWEModel
 from optimization import VCWEAdam
@@ -16,7 +22,9 @@ class Word2VecTrainer:
         torch.manual_seed(seed)
         self.img_data = np.load(img_data_file)
         self.data = DataReader(input_file, vocabulary_file, char2ix_file, maxwordlength, discard, seed)
+        # sample_batch_size，用于构建基本的数据集
         dataset = Word2vecDataset(self.data, window_size, sample_batch_size, neg_num)
+        # line_batch_size是一次取几行数据，可以设为1
         self.dataloader = DataLoader(dataset, batch_size=line_batch_size,
                                      shuffle=True, num_workers=0, collate_fn=dataset.collate)
 
@@ -24,11 +32,25 @@ class Word2VecTrainer:
         self.emb_size = len(self.data.word2id)
         self.char_size = len(self.data.char2id)+1       #5031
         self.emb_dimension = emb_dimension
-        self.line_batch_size = line_batch_size
+        self.line_batch_size = line_batch_size # 在DataLoader中使用
         self.epochs = epochs
         self.initial_lr = initial_lr
-        self.VCWE_model = VCWEModel(self.emb_size, self.emb_dimension, self.data.wordid2charid, self.char_size)
-        self.use_cuda = torch.cuda.is_available()
+        self.VCWE_model = VCWEModel(
+            self.emb_size, 
+            self.emb_dimension, 
+            self.data.wordid2charid, 
+            self.char_size,
+            self.data.noise_dist
+        )
+
+
+        
+        
+        print("#---------------------------------------")
+        print(self.VCWE_model)
+        self.use_cuda = True #torch.cuda.is_available()
+        
+        
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.num_train_steps= int(len(self.dataloader) * self.epochs)
         if self.use_cuda:
@@ -36,7 +58,21 @@ class Word2VecTrainer:
 
 
     def train(self):
+        # img ([5031, 1, 40, 40]) 第一个维度代表不同的字
         self.img_data = torch.from_numpy(self.img_data).to(self.device)
+
+        # print(self.img_data[0][0].shape)
+        # print("----")
+
+        # print(self.img_data[5].sum())
+        # temp2 = self.img_data[0][0].cpu().numpy() * 255
+        # # misc.imsave('out.jpg', temp2)        
+        # im = Image.fromarray(temp2)
+        
+        # im = im.convert('L') 
+
+        # im.save('outfile2.png')
+        # print(self.img_data.shape)
         
         no_decay = ['bias']
         optimizer_parameters = [
@@ -49,7 +85,6 @@ class Word2VecTrainer:
                              lr=self.initial_lr,
                              warmup=0.1,
                              t_total=self.num_train_steps)
-                             
         for epoch in range(self.epochs):
 
             print("Epoch: " + str(epoch + 1))
@@ -57,25 +92,34 @@ class Word2VecTrainer:
 
             running_loss = 0.0
             for i, sample_batched in enumerate(tqdm(self.dataloader)):
-
+                print('-->',len(sample_batched))
                 if len(sample_batched[0]) > 1:
-                    pos_u = sample_batched[0].to(self.device)
-                    pos_v = sample_batched[1].to(self.device)
-                    neg_v = sample_batched[2].to(self.device)
-                    lengths = sample_batched[3].to(self.device)
+                    pos_u = sample_batched[0].to(self.device) # [4096] 中心词，pos_u在这里是词
+                    pos_v = sample_batched[1].to(self.device) # [4096, 9] 范围词
+                    neg_v = sample_batched[2].to(self.device) # [4906, 5] 负样本词
 
+
+                    # lengths = sample_batched[3].to(self.device)
+                    # 查看范围词
+                    # sentence = id2word(id_sentence=pos_v[0].cpu().numpy(),id2word_dict=self.data.id2word)
+                    print("pos_u's {} pos_v's {} neg_v's {}".format(pos_u.shape,pos_v.shape,neg_v.shape))
+                    # print(pos_v)
+                    # print(sentence)
                     optimizer.zero_grad()
                     loss = self.VCWE_model.forward(pos_u, pos_v, neg_v, self.img_data)
+                    # print("loss's type",type(loss),loss)
                     running_loss += loss.item()
 
                     loss.backward()
                     optimizer.step()
 
+                    sys.exit(1)
+
                     if i > 0 and i % 1000 == 0:
                         print('loss=', running_loss/1000)
-                        running_loss=0.0
-
-
+                #         running_loss=0.0
+                # print("要结束了哦")
+                # sys.exit(0)
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 self.VCWE_model.save_embedding(self.data.id2word, self.output_dir+"zh_wiki_VCWE_ep"+str(epoch+1)+".txt")
 
