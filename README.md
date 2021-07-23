@@ -81,3 +81,27 @@ Results:
 }
 
 ```
+
+# dev_1.1
+
+原master分支data目录下，有以下文件：
+
+```shell
+.
+├── char2ix.npz
+├── char_img_sub_mean.npy
+├── vocabulary.txt
+└── zh_wiki_sample_lines_500.txt
+```
+
+现在分支data_dev_1.1目录下，有以下文件：
+
+```shell
+.
+├── char_img_mean_blackground.pkl
+├── char_img_mean.pkl
+└── vocabulary.txt
+```
+
+其中，数据集文件保存在用户目录的`Document`文件夹下
+
