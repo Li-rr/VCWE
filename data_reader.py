@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import Dataset
 import random
 import sys
-
+import utils
 
 class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
@@ -12,9 +12,11 @@ class DataReader:
         np.random.seed(seed)
         random.seed(seed)
         self.discard = discard
-        data = np.load(char2ix_file,allow_pickle=True)
+        # data = np.load(char2ix_file,allow_pickle=True)
         # print(data)
-        self.char2id = data['char_to_ix'].item()
+        # self.char2id = data['char_to_ix'].item()
+
+        self.char2id = utils.pkl_load(char2ix_file)
         self.negatives = []
         self.discards = []
         self.negpos = 0
@@ -40,7 +42,7 @@ class DataReader:
     
 
     def read_words(self):
-        # 读取词表
+        # 读取词表,这里获取所有词的词表
         with open(self.vocabulary_file,"r",encoding="utf-8") as f:
             s=f.readline().strip().split() # 读取第一行
             print(s)
@@ -102,7 +104,7 @@ class DataReader:
 
 
     def initTableNegatives(self):
-        '''初始化负采样表'''
+        '''初始化负采样表,这里可以不要'''
         pow_frequency = np.array(list(self.word_frequency.values())) ** 0.5
         words_pow = sum(pow_frequency)
         ratio = pow_frequency / words_pow
@@ -144,6 +146,7 @@ class Word2vecDataset(Dataset):
                 words = line.split()
 
                 if len(words) > 1:
+                    # 如果在词表中
                     word_ids = [self.data.word2id[w] for w in words if
                                 w in self.data.word2id and np.random.rand() < self.data.discards[self.data.word2id[w]]]
 
