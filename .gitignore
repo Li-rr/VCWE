@@ -1,0 +1,5 @@
+embedding/
+test/
+.vscode/
+__pycache__/
+*pyc
