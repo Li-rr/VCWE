@@ -133,7 +133,7 @@ class Word2VecTrainer:
                         loss_num = loss.item()
                         writer.add_scalar(tag="loss",step=steps,value=loss_num)
                         self.loggger.info("steps:{}/{}, epochs: {}/{}, loss: {}".format(
-                            steps,self.num_train_steps,epoch + 1,self.epochs
+                            steps,self.num_train_steps,epoch + 1,self.epochs,loss_num
                         ))
                     elif steps % 500 == 0:
                         writer.add_histogram(
