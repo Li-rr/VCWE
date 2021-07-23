@@ -14,7 +14,7 @@ import time
 
 class VCWEModel(nn.Module):
 
-    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist):
+    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist,logger):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
@@ -39,6 +39,8 @@ class VCWEModel(nn.Module):
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.uniform_(self.v_embeddings.weight.data, -initrange, initrange)
         init.uniform_(self.char_embeddings.weight.data, -initrange, initrange)
+
+        self.logger = logger
     
     def forward_noise_strong(self,input_vectors,output_vectors):
         batch,words,embed = output_vectors.shape
@@ -79,7 +81,7 @@ class VCWEModel(nn.Module):
         return strong_neg_sample.to(self.device), strong_neg_embed.to(self.device)
 
 
-    def forward_noise_strong_avg(self,avg_output_vectors,neg_num=5):
+    def forward_noise_strong_avg(self,avg_output_vectors,neg_v,neg_num=5):
         '''在glyce中是没有使用求平均，在vcwe中使用使用了求平均'''
         batch,embed = avg_output_vectors.shape
         # time1 = time.time()
@@ -96,13 +98,21 @@ class VCWEModel(nn.Module):
 
         
         # time3 = time.time()
+        
         cos_sim = torch.cosine_similarity(avg_output_vectors,noise_vectors,dim=2) # [batch,miniBatch],每个batch有batch个候选项    
         # time4 = time.time()
         # strong_neg_sample = torch.zeros(batch,neg_num,dtype=torch.int).to(self.device)
         # strong_neg_embed = torch.zeros(batch,neg_num,embed).to(self.device)
 
-        values,indices = cos_sim.topk(k=neg_num,dim=1,largest=True,sorted=True)
-        indices_q = indices.unsqueeze(2).repeat(1,1,embed)
+        try:
+            values,indices = cos_sim.topk(k=neg_num,dim=1,largest=True,sorted=True)
+            indices_q = indices.unsqueeze(2).repeat(1,1,embed)
+        except Exception as e:
+            self.logger.error("异常信息:",e)
+            self.logger.error("cos_sim's shape: {}".format(cos_sim.shape,noise_vectors.shape,avg_output_vectors.shape))
+            emb_neg_v = self.v_embeddings(neg_v)
+            return neg_v,emb_neg_v
+
         # print(noise_words.shape)
         # print(noise_vectors.shape)
         # print(indices.shape)
@@ -138,7 +148,7 @@ class VCWEModel(nn.Module):
 
 
     def forward(self, pos_u, pos_v, neg_v, img_data):
-        img_emb = self.cnn_model.forward(img_data) # [5031, 100]
+        img_emb = self.cnn_model.forward(img_data) # [5031, 100] [5240,100]
         
         # time1 = time.time()
         # print("img_emb's shape",img_emb.shape)
@@ -155,16 +165,18 @@ class VCWEModel(nn.Module):
 
         # strong_neg_sample, strong_neg_embed = self.forward_noise_strong(emb_u,emb_vv)
         # TODO StrongNeg
-        neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v)
+        neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v,neg_v)
 
         # time3 = time.time()
         # print("strong_neg_sample's {} strong_neg_embed's {}".format(strong_neg_sample.shape,strong_neg_embed.shape))
-        # print("avg_strong_neg_sample's {} avg_strong_neg_embed's {}".format(avg_strong_neg_sample.shape,avg_strong_neg_embed.shape))
+        # print("avg_strong_neg_sample's {} avg_strong_neg_embed's {}".format(neg_v.shape,emb_neg_v.shape))
         # print("--")
         # print("pos_v's shape",pos_v.shape) 
         pos_v=pos_v.view(-1).cpu() # [4096, 9] [line_batch_size*sample_batch_size, window_size*2-1]
         # print("pos_v's shape",pos_v.shape) # [18]
         temp = self.wordid2charid[pos_v].reshape(1,-1) # 18 * maxwordlength = 90
+        # print("正样本的temp",'--->',temp.shape,type(temp))
+        # print("最大的下标",temp.max(),temp.min())
         # print("temp's shape",temp.shape)
         temp = torch.from_numpy(temp).to(self.device).long() # [1, 184320] ([1, 90])
         # print("temp's shape",temp.shape)
@@ -173,20 +185,25 @@ class VCWEModel(nn.Module):
         # print(temp)
         # 这种是所有字符在一起训练，然后通过temp来索引出对应的图像Emb
         lstm_input = img_emb[temp.reshape(1, -1)].view(len(pos_v), -1, self.emb_dimension)  # ([18, 5, 100])
-        # print("lstm's input shape",lstm_input.shape)
+        # print("正样本的lstm input","lstm's input shape",lstm_input.shape)
         del temp
         lstm_input = torch.transpose(lstm_input, 0, 1)          #  self.data.maxwordlength, batch_size, embedding_dim
         emb_char_v = self.lstm_model.forward(lstm_input, len(pos_v))
         emb_char_v = emb_char_v.view(pos_u.size(0),-1,self.emb_dimension)
         emb_char_v = torch.mean(emb_char_v,dim=1)
 
-        # 这里的操作和刚才一样
-        pos_neg_v=neg_v.view(-1).cpu()
-        temp = self.wordid2charid[pos_neg_v].reshape(1,-1)
+        # 这里的操作和刚才一样,neg_v [128,5]
+        pos_neg_v=neg_v.view(-1).cpu() # neg_v是采样出来的词的id
+        temp = self.wordid2charid[pos_neg_v].reshape(1,-1) # temp是根据采样出来的词的id获得的字id
+        # print("负采样的temp",'--->',temp.shape,type(temp))
+        # print("最大的下标：",temp.max(),temp.min())
+        # print(temp)
+        # print("--->",max(temp))
         temp = torch.from_numpy(temp).to(self.device).long()
         lstm_input2 = img_emb[temp.reshape(1, -1)].view(len(pos_neg_v), -1, self.emb_dimension)
         del temp
         lstm_input2 = torch.transpose(lstm_input2, 0, 1)
+        # lstm_input2 [5,640,100], len(pos_neg_v) 640
         emb_neg_char_v = self.lstm_model.forward(lstm_input2, len(pos_neg_v))
         emb_neg_char_v = emb_neg_char_v.view(pos_u.size(0),-1,self.emb_dimension)
 
@@ -249,7 +266,8 @@ class LSTMModel(nn.Module):
         return (torch.zeros(2, batch_size, self.hidden_dim).to(self.device),
                 torch.zeros(2, batch_size, self.hidden_dim).to(self.device))
 
-    def forward(self, input, batch_size):                 
+    def forward(self, input, batch_size):   
+        # print(input.shape,batch_size)              
         self.hidden = self.init_hidden(batch_size)
         lstm_out, self.hidden = self.lstm(input, self.hidden)             
         a=self.linear_first(lstm_out)             
