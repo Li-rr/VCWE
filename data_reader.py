@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 import random
-
+import sys
 
 
 class DataReader:
@@ -12,7 +12,8 @@ class DataReader:
         np.random.seed(seed)
         random.seed(seed)
         self.discard = discard
-        data = np.load(char2ix_file)
+        data = np.load(char2ix_file,allow_pickle=True)
+        # print(data)
         self.char2id = data['char_to_ix'].item()
         self.negatives = []
         self.discards = []
@@ -26,44 +27,73 @@ class DataReader:
         self.token_count = 0
         self.word_frequency = dict()
 
-        self.inputFileName = inputFileName
+        self.inputFileName = inputFileName # zh_wiki
         self.vocabulary_file = vocabulary_file
         self.char2ix_file = char2ix_file
         self.read_words()
         self.initTableNegatives()
         self.initTableDiscards()
 
+        self.noise_dist = None
+
+        self.getNoiseDist()
+    
+
     def read_words(self):
+        # 读取词表
         with open(self.vocabulary_file,"r",encoding="utf-8") as f:
-            s=f.readline().strip().split()
-            self.sentences_count=int(s[0])
-            self.token_count=int(s[1])
-            s = f.readline().strip().split()
+            s=f.readline().strip().split() # 读取第一行
+            print(s)
+            self.sentences_count=int(s[0]) # 获取句子的数量
+            self.token_count=int(s[1]) # 获取词的数量
+            s = f.readline().strip().split() 
+            print(s)
             wid = 0
             while s:
-                w=s[0]
-                c=int(s[1])
-                self.word2id[w] = wid
-                self.id2word[wid] = w
-                self.word_frequency[wid] = c
+                w=s[0] # 获得词
+                c=int(s[1]) # 获得词的统计
+                # print(w,c)
+                # break
+                self.word2id[w] = wid # word-id
+                self.id2word[wid] = w # id-word
+                self.word_frequency[wid] = c # 词频
                 wid += 1
-                s = f.readline().strip().split()
-        
-        
+                s = f.readline().strip().split() # 读取下一行
+        # 读取词表完成
+        # sys.exit(1)
         for i in range(len(self.id2word)):
-            word = self.id2word[i]
+            word = self.id2word[i] # 获取词
             w=[]
-            for j in range(len(word)):
+            for j in range(len(word)): # 获取词中的字
                 try:
                     w.append(self.char2id[word[j]])
                 except:
                     w.append(0)
-            while len(w)<self.maxwordlength:w.append(0)
+            while len(w)<self.maxwordlength:w.append(0) # 默认为 5
             w=w[:self.maxwordlength]
-            self.wordid2charid.append(w)
+            self.wordid2charid.append(w) # 得到词中的字
             
         self.wordid2charid=np.array(self.wordid2charid)
         print("Total embeddings: " + str(len(self.word2id)))
+
+    def getNoiseDist(self):
+        # 获得噪声分布
+        print(self.token_count)
+        # print(len(self.word_frequency))
+        # print(self.word_frequency.sum())
+        n_vocab = len(self.word_frequency)
+
+        word_freqs = {id: t/n_vocab for id,t in self.word_frequency.items()}
+        word_freqs = np.array(list(word_freqs.values()))
+
+        unigram_dist = word_freqs/ word_freqs.sum()
+        # noise_dist = torch.from_numpy(unigram_dist ** (0.75) / np.sum(unigram_dist ** (0.75)))
+
+        self.noise_dist = torch.from_numpy(unigram_dist ** (0.75) / np.sum(unigram_dist ** (0.75)))
+        # print(len(word_freqs))
+        # print(word_freqs)
+        # print(noise_dist)
+        pass
 
     def initTableDiscards(self):
         t = self.discard                       #t is a chosen threshold, typically around 10^−5
@@ -72,6 +102,7 @@ class DataReader:
 
 
     def initTableNegatives(self):
+        '''初始化负采样表'''
         pow_frequency = np.array(list(self.word_frequency.values())) ** 0.5
         words_pow = sum(pow_frequency)
         ratio = pow_frequency / words_pow
