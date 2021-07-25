@@ -107,6 +107,7 @@ class Word2VecTrainer:
        
 
             running_loss = 0.0
+            epoch_steps = 0
             for i, sample_batched in enumerate(self.dataloader):
                 # print('len(sample_batched) -->',len(sample_batched))
                 if len(sample_batched[0]) > 1:
@@ -136,6 +137,7 @@ class Word2VecTrainer:
                             steps,self.num_train_steps,epoch + 1,self.epochs,loss_num
                         ))
                     elif steps % 500 == 0:
+                        self.loggger.info("添加直方图，当前steps：{}".format(steps))
                         writer.add_histogram(
                             tag="u's embed",values=self.VCWE_model.u_embeddings.cpu().data.numpy(),
                             step=steps,buckets=10
@@ -145,14 +147,16 @@ class Word2VecTrainer:
                             step=steps,buckets=10
                         )
                     steps += 1
+                    epoch_steps += 1
 
                     # sys.exit(1)
 
-                    if i > 0 and i % 1000 == 0:
-                        print('loss=', running_loss/1000)
-                        running_loss=0.0
+                    # if i > 0 and i % 1000 == 0:
+                    #     print('loss=', running_loss/1000)
+                    #     running_loss=0.0
                 # print("要结束了哦")
                 # sys.exit(0)
+            self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch,running_loss/epoch_steps))
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 self.VCWE_model.save_embedding(self.data.id2word, self.output_dir+"zh_wiki_VCWE_ep"+str(epoch+1)+".txt")
 

@@ -109,7 +109,11 @@ class VCWEModel(nn.Module):
             indices_q = indices.unsqueeze(2).repeat(1,1,embed)
         except Exception as e:
             self.logger.error("异常信息:",e)
-            self.logger.error("cos_sim's shape: {}".format(cos_sim.shape,noise_vectors.shape,avg_output_vectors.shape))
+            self.logger.error("cos_sim's shape: {},noise vector's shape: {},avg_output_vectors's shape: s{}".format(
+                cos_sim.shape,
+                noise_vectors.shape,
+                avg_output_vectors.shape)
+                )
             emb_neg_v = self.v_embeddings(neg_v)
             return neg_v,emb_neg_v
 
