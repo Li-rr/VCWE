@@ -1,8 +1,8 @@
 python trainer.py \
     --input_file /home/stu/Documents/dataset/zhwiki_2021714/wiki_final.txt \
     --vocab_file ./data_dev_1.1/vocabulary.txt \
-    --line_batch_size 8 \
-    --sample_batch_size 256 \
+    --line_batch_size 16 \
+    --sample_batch_size 128 \
     --learning_rate 1e-3 \
     --num_train_epochs 50 \
     --output_dir ./embedding/ \
