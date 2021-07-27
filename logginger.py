@@ -26,7 +26,7 @@ def init_logger(log_name,log_dir):
         console.setFormatter(formatter)
         logger.addHandler(console)
 
-        handler = TimedRotatingFileHandler(filename=os.path.join(log_dir,"ERROR.log"),when='D',backupCount= 30,encoding='utf-8')
+        handler = TimedRotatingFileHandler(filename=os.path.join(log_dir,"%s.error"%log_name),when='D',backupCount= 30,encoding='utf-8')
         datefmt = '%Y-%m-%d %H:%M:%S'
         format_str = '[%(asctime)s]: %(name)s %(filename)s[line:%(lineno)s] %(levelname)s  %(message)s'
         formatter = logging.Formatter(format_str,datefmt)
