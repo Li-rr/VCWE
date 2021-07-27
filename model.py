@@ -5,6 +5,8 @@ from torch.nn import init
 from torchsummary import summary
 import numpy as np
 import time
+import sys
+from utils import random_without_same
 
 """
     u_embedding: Embedding for center word.
@@ -42,18 +44,18 @@ class VCWEModel(nn.Module):
 
         self.logger = logger
         self.exp_name = exp_name
-    
+    # TODO 修改这里来调整负采样的方式
     def forward_noise_strong(self,input_vectors,output_vectors):
         batch,words,embed = output_vectors.shape
-        
+        miniBatch = batch // (64*words)
         noise_words = torch.multinomial(
             self.noise_dist,
-            batch * words * batch,
+            batch * words * miniBatch,
             replacement = True
         ).to(self.device)
 
         
-        noise_words = noise_words.reshape(batch,words,batch)
+        noise_words = noise_words.reshape(batch,words,miniBatch)
         # [batch,words,canda_words,embed], conda_words = batch
         noise_vectors = self.v_embeddings(noise_words)
 
@@ -65,21 +67,26 @@ class VCWEModel(nn.Module):
 
         
         # TODO 这里最好和输出目标词的数量一样
-        strong_neg_sample = torch.zeros(batch,words,dtype=torch.long)
-        strong_neg_embed = torch.zeros(batch,words,self.emb_dimension)
+        # strong_neg_sample = torch.zeros(batch,words,dtype=torch.long)
+        # strong_neg_embed = torch.zeros(batch,words,self.emb_dimension)
 
         # TODO 取前k个负样本，这取1，是因为前面计算是按照输出词的样本计算的，后面可以改
         values,indices = cos_sim.topk(k=1,dim=2,largest=True,sorted=True)
-        
-        for i,f in enumerate(indices):
-            strong_neg_sample[i] = noise_words[i,range(f.shape[0]),f.squeeze()]
-            strong_neg_embed[i] = noise_vectors[i,range(f.shape[0]),f.squeeze()]
+
+        indices_q = indices.repeat(1,1,embed).unsqueeze(2)
+        strong_neg_embed_2 = torch.gather(noise_vectors,2,indices_q)
+        strong_neg_sample_2 = torch.gather(noise_words,2,indices).squeeze()
+        # for i,f in enumerate(indices):
+        #     strong_neg_sample[i] = noise_words[i,range(f.shape[0]),f.squeeze()]
+        #     strong_neg_embed[i] = noise_vectors[i,range(f.shape[0]),f.squeeze()]
         del noise_vectors
         del noise_words
         del output_vectors
         del cos_sim
+        del indices_q
 
-        return strong_neg_sample.to(self.device), strong_neg_embed.to(self.device)
+        return strong_neg_sample_2,strong_neg_embed_2.squeeze(),words
+        # return strong_neg_sample.to(self.device), strong_neg_embed.to(self.device)
 
 
     def forward_noise_strong_avg(self,avg_output_vectors,neg_v,neg_num=5):
@@ -109,9 +116,8 @@ class VCWEModel(nn.Module):
             values,indices = cos_sim.topk(k=neg_num,dim=1,largest=True,sorted=True)
             indices_q = indices.unsqueeze(2).repeat(1,1,embed)
         except Exception as e:
-            self.logger.error("实验代号：{}, 异常信息：{}".format(self.exp_name,e))
-            self.logger.error("实验代号：{}, cos_sim's shape: {},noise vector's shape: {},avg_output_vectors's shape: s{}".format(
-                self.exp_name,
+            self.logger.error("异常信息：{}".format(e))
+            self.logger.error("cos_sim's shape: {},noise vector's shape: {},avg_output_vectors's shape: s{}".format(
                 cos_sim.shape,
                 noise_vectors.shape,
                 avg_output_vectors.shape)
@@ -153,7 +159,7 @@ class VCWEModel(nn.Module):
 
 
 
-    def forward(self, pos_u, pos_v, neg_v, img_data):
+    def forward(self, pos_u, pos_v, neg_v, img_data,neg_num=5):
         img_emb = self.cnn_model.forward(img_data) # [5031, 100] [5240,100]
         
         # time1 = time.time()
@@ -162,14 +168,22 @@ class VCWEModel(nn.Module):
         emb_vv = self.v_embeddings(pos_v)
         emb_v = emb_vv.mean(dim=1) # 范围词,
         # time2 = time.time()
-        emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
+        # emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
 
         
 
         # print("emb_u's {} emb_v's {} emb_neg_v's {}".format(emb_u.shape,emb_v.shape,emb_neg_v.shape))
 
+        # print("------------")
+        strong_neg_sample, strong_neg_embed,words = self.forward_noise_strong(emb_u,emb_vv)
+        random_indices = random_without_same(0,words,neg_num)
+        # print(random_indices)
+        # print(strong_neg_sample.shape,strong_neg_embed.shape)
 
-        # strong_neg_sample, strong_neg_embed = self.forward_noise_strong(emb_u,emb_vv)
+        neg_v,emb_neg_v = strong_neg_sample[:,random_indices],strong_neg_embed[:,random_indices]
+        del strong_neg_embed
+        del strong_neg_sample
+        # sys.exit()
         # TODO StrongNeg
         # neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v,neg_v)
 
