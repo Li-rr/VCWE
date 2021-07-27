@@ -20,7 +20,7 @@ from logginger import init_logger
 
 class Word2VecTrainer:
     def __init__(self, input_file, vocabulary_file, img_data_file, char2ix_file, output_dir, maxwordlength, emb_dimension, line_batch_size, sample_batch_size, 
-                neg_num, window_size, discard, epochs, initial_lr, seed):
+                neg_num, window_size, discard, epochs, initial_lr, seed,exp_name):
                  
         torch.manual_seed(seed)
         # self.img_data = np.load(img_data_file)
@@ -39,14 +39,16 @@ class Word2VecTrainer:
         self.line_batch_size = line_batch_size # 在DataLoader中使用
         self.epochs = epochs
         self.initial_lr = initial_lr
-        self.loggger = init_logger("myVcwe","./logs")
+        self.exp_name = exp_name
+        self.loggger = init_logger("myVcwe_{}".format(self.exp_name),"./logs")
         self.VCWE_model = VCWEModel(
             self.emb_size, 
             self.emb_dimension, 
             self.data.wordid2charid, 
             self.char_size,
             self.data.noise_dist,
-            self.loggger
+            self.loggger,
+            self.exp_name
         )
 
 
@@ -86,7 +88,7 @@ class Word2VecTrainer:
         # print(self.img_data.shape)
         cur_time = datetime.datetime.now()
         cur_time = datetime.datetime.strftime(cur_time,'%Y-%m-%d_%H:%M:%S')
-        logs_path = "./logs/" + cur_time
+        logs_path = "./logs/" + self.exp_name +cur_time
         writer = LogWriter(logdir=logs_path)
 
         no_decay = ['bias']
@@ -156,7 +158,7 @@ class Word2VecTrainer:
                     #     running_loss=0.0
                 # print("要结束了哦")
                 # sys.exit(0)
-            self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch,running_loss/epoch_steps))
+            self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch+1,running_loss/epoch_steps))
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 self.VCWE_model.save_embedding(self.data.id2word, self.output_dir+"zh_wiki_VCWE_ep"+str(epoch+1)+".txt")
 
@@ -225,7 +227,11 @@ def main():
     parser.add_argument('--seed', 
                         type=int, 
                         default=12345,
-                        help="random seed for initialization")                        
+                        help="random seed for initialization")
+    parser.add_argument('--exp_name', 
+                        type=str, 
+                        default="临港大道",
+                        help="实验名称")                            
     args = parser.parse_args()
     w2v = Word2VecTrainer(input_file = args.input_file, \
                           vocabulary_file = args.vocab_file, \
@@ -241,7 +247,10 @@ def main():
                           discard = args.discard,
                           epochs = args.num_train_epochs,
                           initial_lr = args.learning_rate,
-                          seed = args.seed)
+                          seed = args.seed,
+                          exp_name=args.exp_name)
+    # print("---?实验名称",args.exp_name)
+    # sys.exit(0)
     w2v.train()
     
 if __name__ == "__main__":
