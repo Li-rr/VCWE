@@ -14,7 +14,7 @@ import time
 
 class VCWEModel(nn.Module):
 
-    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist,logger):
+    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist,logger,exp_name):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
@@ -41,6 +41,7 @@ class VCWEModel(nn.Module):
         init.uniform_(self.char_embeddings.weight.data, -initrange, initrange)
 
         self.logger = logger
+        self.exp_name = exp_name
     
     def forward_noise_strong(self,input_vectors,output_vectors):
         batch,words,embed = output_vectors.shape
@@ -108,8 +109,9 @@ class VCWEModel(nn.Module):
             values,indices = cos_sim.topk(k=neg_num,dim=1,largest=True,sorted=True)
             indices_q = indices.unsqueeze(2).repeat(1,1,embed)
         except Exception as e:
-            self.logger.error("异常信息:",e)
-            self.logger.error("cos_sim's shape: {},noise vector's shape: {},avg_output_vectors's shape: s{}".format(
+            self.logger.error("实验代号：{}, 异常信息：{}".format(self.exp_name,e))
+            self.logger.error("实验代号：{}, cos_sim's shape: {},noise vector's shape: {},avg_output_vectors's shape: s{}".format(
+                self.exp_name,
                 cos_sim.shape,
                 noise_vectors.shape,
                 avg_output_vectors.shape)
@@ -160,7 +162,7 @@ class VCWEModel(nn.Module):
         emb_vv = self.v_embeddings(pos_v)
         emb_v = emb_vv.mean(dim=1) # 范围词,
         # time2 = time.time()
-        # emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
+        emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
 
         
 
@@ -169,7 +171,7 @@ class VCWEModel(nn.Module):
 
         # strong_neg_sample, strong_neg_embed = self.forward_noise_strong(emb_u,emb_vv)
         # TODO StrongNeg
-        neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v,neg_v)
+        # neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v,neg_v)
 
         # time3 = time.time()
         # print("strong_neg_sample's {} strong_neg_embed's {}".format(strong_neg_sample.shape,strong_neg_embed.shape))
