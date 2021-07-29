@@ -27,7 +27,7 @@ class VCWEModel(nn.Module):
         # 对应Skip-gram
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension, sparse=False)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension, sparse=False)
-        self.char_embeddings = nn.Embedding(char_size, emb_dimension, sparse=False)
+        #self.char_embeddings = nn.Embedding(char_size, emb_dimension, sparse=False)
 
         self.cnn_model = CNNModel(32,32,self.emb_dimension).to(self.device)
         self.lstm_model = LSTMModel(self.emb_dimension).to(self.device)
@@ -40,52 +40,61 @@ class VCWEModel(nn.Module):
         # 初始化权重向量
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.uniform_(self.v_embeddings.weight.data, -initrange, initrange)
-        init.uniform_(self.char_embeddings.weight.data, -initrange, initrange)
+        #init.uniform_(self.char_embeddings.weight.data, -initrange, initrange)
 
         self.logger = logger
         self.exp_name = exp_name
     # TODO 修改这里来调整负采样的方式
-    def forward_noise_strong(self,input_vectors,output_vectors):
+    def forward_noise_strong(self,input_vectors,output_vectors,neg_v,neg_num=5):
+        
         batch,words,embed = output_vectors.shape
-        miniBatch = batch // (64*words)
-        noise_words = torch.multinomial(
-            self.noise_dist,
-            batch * words * miniBatch,
-            replacement = True
-        ).to(self.device)
+        miniBatch = neg_num*2
+        try:
+            noise_words = torch.multinomial(
+                self.noise_dist,
+                batch * words * miniBatch,
+                replacement = True
+            ).to(self.device)
 
-        
-        noise_words = noise_words.reshape(batch,words,miniBatch)
-        # [batch,words,canda_words,embed], conda_words = batch
-        noise_vectors = self.v_embeddings(noise_words)
+            
+            noise_words = noise_words.reshape(batch,words,miniBatch)
+            # [batch,words,canda_words,embed], conda_words = batch
+            noise_vectors = self.v_embeddings(noise_words)
 
-        
-        # 修改为适合相似度计算的情况
-        output_vectors = output_vectors.view(batch,words,1,embed)
+            
+            # 修改为适合相似度计算的情况
+            output_vectors = output_vectors.view(batch,words,1,embed)
 
-        cos_sim = torch.cosine_similarity(output_vectors,noise_vectors,dim=3)
+            cos_sim = torch.cosine_similarity(output_vectors,noise_vectors,dim=3)
 
-        
-        # TODO 这里最好和输出目标词的数量一样
-        # strong_neg_sample = torch.zeros(batch,words,dtype=torch.long)
-        # strong_neg_embed = torch.zeros(batch,words,self.emb_dimension)
+            
+            # TODO 这里最好和输出目标词的数量一样
+            # strong_neg_sample = torch.zeros(batch,words,dtype=torch.long)
+            # strong_neg_embed = torch.zeros(batch,words,self.emb_dimension)
 
-        # TODO 取前k个负样本，这取1，是因为前面计算是按照输出词的样本计算的，后面可以改
-        values,indices = cos_sim.topk(k=1,dim=2,largest=True,sorted=True)
+            # TODO 取前k个负样本，这取1，是因为前面计算是按照输出词的样本计算的，后面可以改
+            values,indices = cos_sim.topk(k=1,dim=2,largest=True,sorted=True)
 
-        indices_q = indices.repeat(1,1,embed).unsqueeze(2)
-        strong_neg_embed_2 = torch.gather(noise_vectors,2,indices_q)
-        strong_neg_sample_2 = torch.gather(noise_words,2,indices).squeeze()
-        # for i,f in enumerate(indices):
-        #     strong_neg_sample[i] = noise_words[i,range(f.shape[0]),f.squeeze()]
-        #     strong_neg_embed[i] = noise_vectors[i,range(f.shape[0]),f.squeeze()]
-        del noise_vectors
-        del noise_words
-        del output_vectors
-        del cos_sim
-        del indices_q
+            indices_q = indices.repeat(1,1,embed).unsqueeze(2)
+            strong_neg_embed_2 = torch.gather(noise_vectors,2,indices_q)
+            strong_neg_sample_2 = torch.gather(noise_words,2,indices).squeeze()
+            # for i,f in enumerate(indices):
+            #     strong_neg_sample[i] = noise_words[i,range(f.shape[0]),f.squeeze()]
+            #     strong_neg_embed[i] = noise_vectors[i,range(f.shape[0]),f.squeeze()]
+            del noise_vectors
+            del noise_words
+            del output_vectors
+            del cos_sim
+            del indices_q
 
-        return strong_neg_sample_2,strong_neg_embed_2.squeeze(),words
+            return strong_neg_sample_2,strong_neg_embed_2.squeeze(),words
+        except Exception as e:
+            self.logger.error("错误信息：{}".format(e))
+            self.logger.error("输入的output_vectors信息：{},miniBatch：{}".format(output_vectors.shape,miniBatch))
+            self.logger.error("文件：{}".format(e.__traceback__.tb_frame.f_globals['__file__']))
+            self.logger.error("行号：{}".format(e.__traceback__.tb_lineno))
+            emb_neg_v = self.v_embeddings(neg_v)
+            return neg_v,emb_neg_v,neg_num
         # return strong_neg_sample.to(self.device), strong_neg_embed.to(self.device)
 
 
@@ -175,7 +184,7 @@ class VCWEModel(nn.Module):
         # print("emb_u's {} emb_v's {} emb_neg_v's {}".format(emb_u.shape,emb_v.shape,emb_neg_v.shape))
 
         # print("------------")
-        strong_neg_sample, strong_neg_embed,words = self.forward_noise_strong(emb_u,emb_vv)
+        strong_neg_sample, strong_neg_embed,words = self.forward_noise_strong(emb_u,emb_vv,neg_v,neg_num)
         random_indices = random_without_same(0,words,neg_num)
         # print(random_indices)
         # print(strong_neg_sample.shape,strong_neg_embed.shape)
@@ -226,28 +235,57 @@ class VCWEModel(nn.Module):
         # lstm_input2 [5,640,100], len(pos_neg_v) 640
         emb_neg_char_v = self.lstm_model.forward(lstm_input2, len(pos_neg_v))
         emb_neg_char_v = emb_neg_char_v.view(pos_u.size(0),-1,self.emb_dimension)
-
-        # 中心词与范围词，既正样本词
+        # print("--------------------->")
+        # print("范围词 emb_u's shape",emb_u.shape)  # [batch,emb_dim]
+        # print("中心词的图像emb emb_char_v's shape",emb_char_v.shape) # [batch,emb_dim]
+        # TODO 中心词与范围词的图像Emb，既正样本词
         c_score = torch.sum(torch.mul(emb_u, emb_char_v), dim=1)
+        # print("c_score",c_score.shape)
         c_score = torch.clamp(c_score, max=10, min=-10)
         c_score = -F.logsigmoid(c_score)
-
-        # 中心词与负样本词，既负样本词
+        
+        # print("---------------------->")
+        # print("负样本词的图像emb emb_neg_char_v's shape",emb_neg_char_v.shape) #[batch,neg_num,emb_dim]
+        # print("范围词 emb_u's shape",emb_u.shape) # [bathch,emb_dim]
+        # TODO 中心词与负样本词，既负样本词
         neg_c_score = torch.bmm(emb_neg_char_v, emb_u.unsqueeze(2)).squeeze()
+        # print("neg_c_score",neg_c_score.shape) # [1990,5]
         neg_c_score = torch.clamp(neg_c_score, max=10, min=-10)
+        
         neg_c_score = -torch.sum(F.logsigmoid(-neg_c_score), dim=1)
 
-        # 中心词与范围词的图像emb，既正样本词
-        score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
-        score = torch.clamp(score, max=10, min=-10)
+        # TODO 这个地方需要改
+        # print("-------------------------->")
+        # print("范围词 emb_u's shape",emb_u.shape) # [batch,emb_dim]
+        # print("中心词 emb_v's shape",emb_v.shape) # [batch,emb_dim]
+        # TODO 中心词与范围词的图像，既正样本词
+        # score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
+        # score = torch.clamp(score, max=10, min=-10)
+        score1 = torch.bmm(emb_vv,emb_u.unsqueeze(2)).squeeze()
+        # print("score1",score1.shape)
+        score2 = torch.sum(score1,dim=1)
+        # print("score2",score2.shape)
+        # print("score__",score.shape)
+        score = torch.clamp(score2, max=10, min=-10)
+
+
         score = -F.logsigmoid(score)
 
-        # 中心词与负样本的词的图像emb，既负样本词
-        neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
-        neg_score = torch.clamp(neg_score, max=10, min=-10)
-        neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
-        # time4 = time.time()
 
+        # print("-------------------------->")
+        # print("负样本词 emb_neg_v's shape",emb_neg_v.shape) # [batch,neg_num,emb_dim]
+        # print("范围词 emb_u's shape",emb_u.shape) # [batch,emb_dim]
+
+        
+        # TODO 中心词与负样本的词的图像emb，既负样本词
+        neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
+        # print("neg_score",neg_score)
+        neg_score = torch.clamp(neg_score, max=10, min=-10)
+        # print("neg_score",neg_score)
+        neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
+        # print()
+        # time4 = time.time()
+        # sys.exit(1)
         # print(time2-time1,time3-time2,time4-time3)
         return torch.mean(c_score + neg_c_score + score + neg_score)
 
