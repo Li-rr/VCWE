@@ -24,5 +24,5 @@ def ensure_dir(path):
 
 
 if __name__ == "__main__":
-    indices = random_without_same(0,9,5)
+    indices = random_without_same(0,5,5)
     print(indices)
