@@ -17,12 +17,14 @@ from data_reader import DataReader, Word2vecDataset
 from model import VCWEModel
 from optimization import VCWEAdam
 from logginger import init_logger 
+import random
 
 class Word2VecTrainer:
     def __init__(self, input_file, vocabulary_file, img_data_file, char2ix_file, output_dir, maxwordlength, emb_dimension, line_batch_size, sample_batch_size, 
                 neg_num, window_size, discard, epochs, initial_lr, seed,exp_name):
                  
         torch.manual_seed(seed)
+        random.seed(seed)
         # self.img_data = np.load(img_data_file)
         self.img_data = pkl_load(img_data_file)
         self.data = DataReader(input_file, vocabulary_file, char2ix_file, maxwordlength, discard, seed)
