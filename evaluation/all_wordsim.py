@@ -9,7 +9,7 @@ def computRho(word_vecs,word_sim_dir):
     for i,filename in enumerate(sim_files):
         manual_dict, auto_dict = ({}, {})
         not_found, total_size = (0, 0)
-        for line in open(os.path.join(word_sim_dir, filename),'r'):
+        for line in open(os.path.join(word_sim_dir, filename),'r',encoding='utf-8'):
             line = line.strip().lower()
             word1, word2, val = line.split()
             if word1 in word_vecs and word2 in word_vecs:
