@@ -8,7 +8,7 @@ python trainer.py \
     --line_batch_size 64 \
     --sample_batch_size 128 \
 	--emb_dim 100 \
-    --learning_rate 1e-3 \
+    --learning_rate 2e-3 \
     --num_train_epochs 50 \
     --output_dir ./embedding/ \
     --img_data_file ./data_dev_1.1/char_img_mean.pkl \
