@@ -105,10 +105,26 @@ class Word2VecTrainer:
                              warmup=0.1,
                              t_total=self.num_train_steps)
         steps = 0
+        accumulation_steps = 8 # 用于梯度积累
         for epoch in range(self.epochs):
 
             self.loggger.info("Epoch: " + str(epoch + 1))
-       
+            '''
+            进来一个batch的数据，计算一次梯度，更新一次网络
+            1. 获取Loss
+            2. optimizer.zero_grad()清空过往梯度；
+            3. loss.backward()反向传播，计算当前梯度；
+            4. optimizer.step()根据梯度更新网络参数
+
+            TODO 梯度累加策略
+            1. 获取loss
+            2. loss.backward() 反向传播，计算当前梯度；
+            3. 多次循环步骤1-2，不清空梯度，使梯度累加在已有梯度上；
+            4. 梯度累加了一定次数后，先 optimizer.step() 
+                根据累计的梯度更新网络参数，然后 optimizer.zero_grad() 清空过往梯度，
+                为下一波梯度累加做准备；
+            '''
+
 
             running_loss = 0.0
             epoch_steps = 0
@@ -126,16 +142,22 @@ class Word2VecTrainer:
                     # print("pos_u's {} pos_v's {} neg_v's {}".format(pos_u.shape,pos_v.shape,neg_v.shape))
                     # print(pos_v)
                     # print(sentence)
-                    optimizer.zero_grad()
+                    # optimizer.zero_grad()
                     loss = self.VCWE_model.forward(pos_u, pos_v, neg_v, self.img_data)
                     # print("loss's type",type(loss),loss)
                     running_loss += loss.item()
+                    loss_2 = loss.item()
+                    loss = loss / accumulation_steps  # 2.1 loss regularization
+                    
 
                     loss.backward()
-                    optimizer.step()
+                    # optimizer.step()
 
+                    if((i+1)%accumulation_steps)==0:
+                        optimizer.step() # update parameters of net
+                        optimizer.zero_grad() # reset gradient
                     if steps % 50 == 0:
-                        loss_num = loss.item()
+                        loss_num = loss.item() * accumulation_steps
                         writer.add_scalar(tag="loss",step=steps,value=loss_num)
                         self.loggger.info("steps:{}/{}, epochs: {}/{}, loss: {}".format(
                             steps,self.num_train_steps,epoch + 1,self.epochs,loss_num
@@ -163,6 +185,12 @@ class Word2VecTrainer:
             self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch+1,running_loss/epoch_steps))
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 self.VCWE_model.save_embedding(self.data.id2word, self.output_dir+"zh_wiki_VCWE_ep"+str(epoch+1)+".txt")
+                state = {
+                    'model':self.VCWE_model.state_dict(),
+                    'optimizer':optimizer.state_dict(),
+                    'epoch': epoch
+                }
+                torch.save(state,"./model/{}_{}_vcwe_parame".format(self.exp_name,epoch+1))
 
 
 def main():
