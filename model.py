@@ -259,14 +259,14 @@ class VCWEModel(nn.Module):
         # print("范围词 emb_u's shape",emb_u.shape) # [batch,emb_dim]
         # print("中心词 emb_v's shape",emb_v.shape) # [batch,emb_dim]
         # TODO 中心词与范围词的图像，既正样本词
-        # score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
-        # score = torch.clamp(score, max=10, min=-10)
-        score1 = torch.bmm(emb_vv,emb_u.unsqueeze(2)).squeeze()
+        score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
+        score = torch.clamp(score, max=10, min=-10)
+        #score1 = torch.bmm(emb_vv,emb_u.unsqueeze(2)).squeeze()
         # print("score1",score1.shape)
-        score2 = torch.sum(score1,dim=1)
+        #score2 = torch.sum(score1,dim=1)
         # print("score2",score2.shape)
         # print("score__",score.shape)
-        score = torch.clamp(score2, max=10, min=-10)
+        #score = torch.clamp(score2, max=10, min=-10)
 
 
         score = -F.logsigmoid(score)
