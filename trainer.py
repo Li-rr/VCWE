@@ -157,7 +157,7 @@ class Word2VecTrainer:
                     if((i+1)%accumulation_steps)==0:
                         optimizer.step() # update parameters of net
                         scheduler.step() # 更新学习率
-                        writer.add_scalar(tag='lr',steps=steps,value=scheduler.get_lr()[0])
+                        writer.add_scalar(tag='lr',step=steps,value=scheduler.get_lr()[0])
                         optimizer.zero_grad() # reset gradient
                     if steps % 50 == 0:
                         loss_num = loss.item() * accumulation_steps
