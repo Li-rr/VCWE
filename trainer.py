@@ -104,7 +104,7 @@ class Word2VecTrainer:
                              lr=self.initial_lr,
                              warmup=0.1,
                              t_total=self.num_train_steps)
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.epochs, eta_min=1e-4, last_epoch=-1)
+        # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.epochs, eta_min=1e-4, last_epoch=-1)
         steps = 0
         for epoch in range(self.epochs):
 
@@ -134,7 +134,7 @@ class Word2VecTrainer:
 
                     loss.backward()
                     optimizer.step()
-                    scheduler.step()
+                    # scheduler.step()
 
                     if steps % 50 == 0:
                         loss_num = loss.item()
@@ -162,7 +162,8 @@ class Word2VecTrainer:
                     #     running_loss=0.0
                 # print("要结束了哦")
                 # sys.exit(0)
-            self.loggger.info("epoch: {}, avg_epoch_loss: {} lr: {}".format(epoch+1,running_loss/epoch_steps,scheduler.get_last_lr()))
+            # self.loggger.info("epoch: {}, avg_epoch_loss: {} lr: {}".format(epoch+1,running_loss/epoch_steps,scheduler.get_last_lr()))
+            self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch+1,running_loss/epoch_steps))
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 output_dir = "/data/home/scv2877/archive/"
                 state = {
