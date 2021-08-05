@@ -146,7 +146,7 @@ class VCWEModel(nn.Module):
         emb_vv = self.v_embeddings(pos_v)
         emb_v = emb_vv.mean(dim=1) # 范围词,
         # time2 = time.time()
-        # emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
+        emb_neg_v = self.v_embeddings(neg_v) # 负样本词 [128 5 100]
 
         
 
@@ -155,7 +155,7 @@ class VCWEModel(nn.Module):
 
         # strong_neg_sample, strong_neg_embed = self.forward_noise_strong(emb_u,emb_vv)
         # TODO StrongNeg
-        neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v)
+        # neg_v, emb_neg_v = self.forward_noise_strong_avg(emb_v)
 
         # time3 = time.time()
         # print("strong_neg_sample's {} strong_neg_embed's {}".format(strong_neg_sample.shape,strong_neg_embed.shape))

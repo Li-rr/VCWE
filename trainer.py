@@ -1,26 +1,32 @@
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm import tqdm_notebook as tqdm
 import numpy as np
 import argparse
 import sys
 from PIL import Image
 from scipy import misc
 from torchsummary import summary
+from visualdl import LogWriter # 百度可视化工具
+import datetime
 
-
-from utils import id2word
+from torch.optim import lr_scheduler
+from utils import id2word,pkl_load
 from data_reader import DataReader, Word2vecDataset
 from model import VCWEModel
 from optimization import VCWEAdam
+from logginger import init_logger 
+import random
 
 class Word2VecTrainer:
     def __init__(self, input_file, vocabulary_file, img_data_file, char2ix_file, output_dir, maxwordlength, emb_dimension, line_batch_size, sample_batch_size, 
-                neg_num, window_size, discard, epochs, initial_lr, seed):
+                neg_num, window_size, discard, epochs, initial_lr, seed,exp_name):
                  
         torch.manual_seed(seed)
-        self.img_data = np.load(img_data_file)
+        random.seed(seed)
+        # self.img_data = np.load(img_data_file)
+        self.img_data = pkl_load(img_data_file)
         self.data = DataReader(input_file, vocabulary_file, char2ix_file, maxwordlength, discard, seed)
         # sample_batch_size，用于构建基本的数据集
         dataset = Word2vecDataset(self.data, window_size, sample_batch_size, neg_num)
@@ -35,12 +41,16 @@ class Word2VecTrainer:
         self.line_batch_size = line_batch_size # 在DataLoader中使用
         self.epochs = epochs
         self.initial_lr = initial_lr
+        self.exp_name = exp_name
+        self.loggger = init_logger("myVcwe_{}".format(self.exp_name),"./logs")
         self.VCWE_model = VCWEModel(
             self.emb_size, 
             self.emb_dimension, 
             self.data.wordid2charid, 
             self.char_size,
-            self.data.noise_dist
+            self.data.noise_dist,
+            self.loggger,
+            self.exp_name
         )
 
 
@@ -61,6 +71,11 @@ class Word2VecTrainer:
         # img ([5031, 1, 40, 40]) 第一个维度代表不同的字
         self.img_data = torch.from_numpy(self.img_data).to(self.device)
 
+        if self.img_data.dim() == 3:
+            print(self.img_data.shape)
+            self.img_data = self.img_data.unsqueeze(1)
+            print(self.img_data.shape)
+        # sys.exit(0)
         # print(self.img_data[0][0].shape)
         # print("----")
 
@@ -73,7 +88,11 @@ class Word2VecTrainer:
 
         # im.save('outfile2.png')
         # print(self.img_data.shape)
-        
+        cur_time = datetime.datetime.now()
+        cur_time = datetime.datetime.strftime(cur_time,'%Y-%m-%d_%H:%M:%S')
+        logs_path = "./logs/" + self.exp_name +cur_time
+        writer = LogWriter(logdir=logs_path)
+
         no_decay = ['bias']
         optimizer_parameters = [
              {'params': [p for n, p in self.VCWE_model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay_rate': 0.01},
@@ -85,14 +104,33 @@ class Word2VecTrainer:
                              lr=self.initial_lr,
                              warmup=0.1,
                              t_total=self.num_train_steps)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.epochs, eta_min=1e-4, last_epoch=-1)
+        steps = 0
+        accumulation_steps = 4 # 用于梯度积累
         for epoch in range(self.epochs):
 
-            print("Epoch: " + str(epoch + 1))
-       
+            self.loggger.info("Epoch: " + str(epoch + 1))
+            '''
+            进来一个batch的数据，计算一次梯度，更新一次网络
+            1. 获取Loss
+            2. optimizer.zero_grad()清空过往梯度；
+            3. loss.backward()反向传播，计算当前梯度；
+            4. optimizer.step()根据梯度更新网络参数
+
+            TODO 梯度累加策略
+            1. 获取loss
+            2. loss.backward() 反向传播，计算当前梯度；
+            3. 多次循环步骤1-2，不清空梯度，使梯度累加在已有梯度上；
+            4. 梯度累加了一定次数后，先 optimizer.step() 
+                根据累计的梯度更新网络参数，然后 optimizer.zero_grad() 清空过往梯度，
+                为下一波梯度累加做准备；
+            '''
+
 
             running_loss = 0.0
-            for i, sample_batched in enumerate(tqdm(self.dataloader)):
-                print('-->',len(sample_batched))
+            epoch_steps = 0
+            for i, sample_batched in enumerate(self.dataloader):
+                # print('len(sample_batched) -->',len(sample_batched))
                 if len(sample_batched[0]) > 1:
                     pos_u = sample_batched[0].to(self.device) # [4096] 中心词，pos_u在这里是词
                     pos_v = sample_batched[1].to(self.device) # [4096, 9] 范围词
@@ -102,26 +140,60 @@ class Word2VecTrainer:
                     # lengths = sample_batched[3].to(self.device)
                     # 查看范围词
                     # sentence = id2word(id_sentence=pos_v[0].cpu().numpy(),id2word_dict=self.data.id2word)
-                    print("pos_u's {} pos_v's {} neg_v's {}".format(pos_u.shape,pos_v.shape,neg_v.shape))
+                    # print("pos_u's {} pos_v's {} neg_v's {}".format(pos_u.shape,pos_v.shape,neg_v.shape))
                     # print(pos_v)
                     # print(sentence)
-                    optimizer.zero_grad()
+                    # optimizer.zero_grad()
                     loss = self.VCWE_model.forward(pos_u, pos_v, neg_v, self.img_data)
                     # print("loss's type",type(loss),loss)
                     running_loss += loss.item()
+                    loss_2 = loss.item()
+                    loss = loss / accumulation_steps  # 2.1 loss regularization
+                    
 
                     loss.backward()
-                    optimizer.step()
+                    # optimizer.step()
 
-                    sys.exit(1)
+                    if((i+1)%accumulation_steps)==0:
+                        optimizer.step() # update parameters of net
+                        scheduler.step() # 更新学习率
+                        writer.add_scalar(tag='lr',step=steps,value=scheduler.get_lr()[0])
+                        optimizer.zero_grad() # reset gradient
+                    if steps % 50 == 0:
+                        loss_num = loss.item() * accumulation_steps
+                        writer.add_scalar(tag="loss",step=steps,value=loss_num)
+                        self.loggger.info("steps:{}/{}, epochs: {}/{}, loss: {}".format(
+                            steps,self.num_train_steps,epoch + 1,self.epochs,loss_num
+                        ))
+                    elif steps % 500 == 0:
+                        self.loggger.info("添加直方图，当前steps：{}".format(steps))
+                        writer.add_histogram(
+                            tag="u's embed",values=self.VCWE_model.u_embeddings.cpu().data.numpy(),
+                            step=steps,buckets=10
+                        )
+                        writer.add_histogram(
+                            tag="v's embed",values=self.VCWE_model.v_embeddings.cpu().data.numpy(),
+                            step=steps,buckets=10
+                        )
+                    steps += 1
+                    epoch_steps += 1
 
-                    if i > 0 and i % 1000 == 0:
-                        print('loss=', running_loss/1000)
-                #         running_loss=0.0
+                    # sys.exit(1)
+
+                    # if i > 0 and i % 1000 == 0:
+                    #     print('loss=', running_loss/1000)
+                    #     running_loss=0.0
                 # print("要结束了哦")
                 # sys.exit(0)
+            self.loggger.info("epoch: {}, avg_epoch_loss: {}".format(epoch+1,running_loss/epoch_steps))
             if (epoch+1) % 5 == 0 or (epoch+1) == self.epochs:
                 self.VCWE_model.save_embedding(self.data.id2word, self.output_dir+"zh_wiki_VCWE_ep"+str(epoch+1)+".txt")
+                state = {
+                    'model':self.VCWE_model.state_dict(),
+                    'optimizer':optimizer.state_dict(),
+                    'epoch': epoch
+                }
+                torch.save(state,"./model/{}_{}_vcwe_parame".format(self.exp_name,epoch+1))
 
 
 def main():
@@ -188,7 +260,11 @@ def main():
     parser.add_argument('--seed', 
                         type=int, 
                         default=12345,
-                        help="random seed for initialization")                        
+                        help="random seed for initialization")
+    parser.add_argument('--exp_name', 
+                        type=str, 
+                        default="临港大道",
+                        help="实验名称")                            
     args = parser.parse_args()
     w2v = Word2VecTrainer(input_file = args.input_file, \
                           vocabulary_file = args.vocab_file, \
@@ -204,7 +280,10 @@ def main():
                           discard = args.discard,
                           epochs = args.num_train_epochs,
                           initial_lr = args.learning_rate,
-                          seed = args.seed)
+                          seed = args.seed,
+                          exp_name=args.exp_name)
+    # print("---?实验名称",args.exp_name)
+    # sys.exit(0)
     w2v.train()
     
 if __name__ == "__main__":
