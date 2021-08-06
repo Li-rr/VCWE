@@ -15,5 +15,5 @@ def read_word_vectors(filename,is_normalization=True):
             if is_normalization:word_vecs[word] /= math.sqrt((word_vecs[word]**2).sum() + 1e-6)
             line = f.readline().strip().lower()
 
-    print("Vectors read from: "+filename+" \n")
+    # print("Vectors read from: "+filename+" \n")
     return word_vecs
