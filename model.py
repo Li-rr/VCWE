@@ -14,7 +14,7 @@ import time
 
 class VCWEModel(nn.Module):
 
-    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist):
+    def __init__(self, emb_size, emb_dimension, wordid2charid, char_size,noise_dist,logger,exp_name):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
