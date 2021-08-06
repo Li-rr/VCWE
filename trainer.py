@@ -104,7 +104,7 @@ class Word2VecTrainer:
                              lr=self.initial_lr,
                              warmup=0.1,
                              t_total=self.num_train_steps)
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.epochs, eta_min=1e-4, last_epoch=-1)
+        # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.epochs, eta_min=1e-4, last_epoch=-1)
         steps = 0
         accumulation_steps = 4 # 用于梯度积累
         for epoch in range(self.epochs):
@@ -156,8 +156,8 @@ class Word2VecTrainer:
 
                     if((i+1)%accumulation_steps)==0:
                         optimizer.step() # update parameters of net
-                        scheduler.step() # 更新学习率
-                        writer.add_scalar(tag='lr',step=steps,value=scheduler.get_lr()[0])
+                        # scheduler.step() # 更新学习率
+                        # writer.add_scalar(tag='lr',step=steps,value=scheduler.get_lr()[0])
                         optimizer.zero_grad() # reset gradient
                     if steps % 50 == 0:
                         loss_num = loss.item() * accumulation_steps
