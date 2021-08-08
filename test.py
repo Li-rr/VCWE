@@ -60,15 +60,15 @@ def test2(img_data_file="./data/char_img_sub_mean.npy"):
     # id2char = {v:k for k,v in char2id.items()}
     
     # print(id2char[0])
-    # for ch,ch_id in char2id.items():
+    for ch,ch_id in char2id.items():
         # print(ch_id)
         # if ch_id == 0:
-            # print(ch)/
-        # ch_image = img_data[ch_id]
-        # # print(ch_image.squeeze().shape)
-        # # break
-        # img = Image.fromarray(ch_image.squeeze())
-        # img.convert("RGB").save("{}_{}.jpg".format(ch,ch_id))
+        #     print(ch)/
+        ch_image = img_data[ch_id]
+        # print(ch_image.squeeze().shape)
+        # break
+        img = Image.fromarray(ch_image.squeeze()*255)
+        img.convert("RGB").save("{}_{}.jpg".format(ch,ch_id))
 
     # for i in range(len(char)):
     #     # print(char[i])
