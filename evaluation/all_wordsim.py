@@ -1,10 +1,13 @@
 # -*- coding:utf-8 -*-
 import sys
 import os
-from read_write import read_word_vectors
-from ranking import *
+from evaluation.read_write import read_word_vectors
+from evaluation.ranking import *
+# from read_write import read_word_vectors
+# from ranking import *
 def computRho(word_vecs,word_sim_dir):
     res = {}
+    res_list = []
     sim_files = ['CH-240.txt','CH-297.txt','CH-MC-30.txt','CH-RG-65.txt']
     for i,filename in enumerate(sim_files):
         manual_dict, auto_dict = ({}, {})
@@ -19,9 +22,11 @@ def computRho(word_vecs,word_sim_dir):
                 not_found += 1
 
             total_size += 1
-        res[filename] = "%15.4f" %spearmans_rho(assign_ranks(manual_dict), assign_ranks(auto_dict))
+        temp = spearmans_rho(assign_ranks(manual_dict), assign_ranks(auto_dict))
+        res[filename] = "%15.4f" %temp
+        res_list.append(temp)
         # print("%6s" % str(i+1), "%20s" % filename, "%15s" % str(total_size), "%15s" % str(not_found), "%15.4f" % spearmans_rho(assign_ranks(manual_dict), assign_ranks(auto_dict)))
-    return res
+    return res,res_list
 def dealAllFile():
     word_vec_dir = sys.argv[1]
     word_sim_dir = sys.argv[2]
@@ -35,7 +40,8 @@ def dealAllFile():
     for wod_vec_simple_name, word_vec_f in word_vec_files:
         word_vec_path = os.path.join(word_vec_dir,word_vec_f)
         word_vec_s = read_word_vectors(word_vec_path,False)
-        res = computRho(word_vec_s,word_sim_dir)
+        res,res_list = computRho(word_vec_s,word_sim_dir)
+        print(res)
         cur_res = temp_res.format(wod_vec_simple_name,res['CH-240.txt'],res['CH-297.txt'],res['CH-MC-30.txt'],res['CH-RG-65.txt']) 
         print(cur_res)
     # word_vec_files = [os.path.join(word_vec_dir,f) for f in word_vec_files]
