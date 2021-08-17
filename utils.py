@@ -21,7 +21,27 @@ def pkl_dump(data,f_path):
 def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+def trial_name_string(trial,trail_name,mode="name"):
+    """
+    Args:
+        trial (Trial): A generated trial object.
 
+    Returns:
+        trial_name (str): String representation of Trial.
+    """
+    print("---------------------")
+    print(trial.trainable_name)
+    print(trial.trial_id)
+    print(trial.experiment_tag)
+    print(trial.logdir)
+    print(trial.local_dir)
+    print("===============")
+    if mode == "name":
+        trail_name = "{}_{}".format(trail_name,trial.trial_id)
+    elif mode == "dir":
+        trail_name = "{}_{}_{}".format(trail_name,trial.trial_id,trial.experiment_tag)
+    # sys.exit(1)
+    return trail_name
 
 if __name__ == "__main__":
     indices = random_without_same(0,5,5)
