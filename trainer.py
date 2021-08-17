@@ -54,6 +54,9 @@ class Word2VecTrainer:
         self.initial_lr = initial_lr
         self.exp_name = exp_name
 
+        torch.manual_seed(self.seed)
+        random.seed(self.seed)
+
 
 
     def rho_acc(self,embds,word2id):
@@ -112,8 +115,7 @@ class Word2VecTrainer:
         '''
         在这里改造训练部分的代码
         '''
-        torch.manual_seed(config['seed'])
-        random.seed(config['seed'])
+
         # self.img_data = np.load(img_data_file)
         self.img_data = pkl_load(self.img_data_file)
         self.data = DataReader(self.input_file, self.vocabulary_file, self.char2ix_file, self.maxwordlength, self.discard, self.seed)
@@ -384,8 +386,8 @@ def main():
                           exp_name=args.exp_name)
     # print("---?实验名称",args.exp_name)
     # sys.exit(0)
-    # w2v.train()
-    w2v.train_tune(num_samples=4)
+    w2v.train()
+    # w2v.train_tune(num_samples=4)
     
 if __name__ == "__main__":
     main()
