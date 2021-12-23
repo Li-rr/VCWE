@@ -1,3 +1,4 @@
+from typing import Counter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -299,15 +300,19 @@ class VCWEModel(nn.Module):
 
 
 class LSTMModel(nn.Module):
-
+    count = 0
     def __init__(self, emb_dimension, d_a=128):
         super().__init__()
         self.emb_dimension = emb_dimension
         self.hidden_dim = emb_dimension
-        self.lstm = nn.LSTM(input_size=self.emb_dimension, hidden_size=self.hidden_dim, num_layers=1, bidirectional=True)
+        # self.lstm = nn.LSTM(input_size=self.emb_dimension, hidden_size=self.hidden_dim, num_layers=1, bidirectional=True)
+        self.gru = nn.GRU(input_size=self.emb_dimension,hidden_size=self.hidden_dim,num_layers=1,bidirectional=True)
         initrange = 1.0 / self.emb_dimension
-        init.uniform_(self.lstm.all_weights[0][0], -initrange, initrange)
-        init.uniform_(self.lstm.all_weights[0][1], -initrange, initrange)
+        # init.uniform_(self.lstm.all_weights[0][0], -initrange, initrange)
+        # init.uniform_(self.lstm.all_weights[0][1], -initrange, initrange)
+
+        init.uniform_(self.gru.all_weights[0][0],-initrange,initrange)
+        init.uniform_(self.gru.all_weights[0][1],-initrange,initrange)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # self.device = torch.device("cpu")
 
@@ -326,15 +331,25 @@ class LSTMModel(nn.Module):
 
     def forward(self, input, batch_size):   
         # print(input.shape,batch_size)              
-        self.hidden = self.init_hidden(batch_size)
-        lstm_out, self.hidden = self.lstm(input, self.hidden)             
-        a=self.linear_first(lstm_out)             
+        # self.hidden = self.init_hidden(batch_size)[0]
+        # lstm_out, self.hidden = self.lstm(input, self.hidden)         
+        # if LSTMModel.count == 0:
+            # print("-"*10)
+            # self.hidden = self.init_hidden(batch_size)[0]
+            
+        # print(LSTMModel.count,self.hidden.size())
+        # gru_out,self.hidden = self.gru(input,self.hidden) 
+        gru_out,_ = self.gru(input)   
+        # a=self.linear_first(lstm_out)             
+        a=self.linear_first(gru_out)
         a=torch.tanh(a)
         a=self.linear_second(a)           
         a=F.softmax(a,dim=0)             
         a=a.expand(5,batch_size,2*self.hidden_dim)
-        y=(a*lstm_out).sum(dim=0)    
+        # y=(a*lstm_out).sum(dim=0)    
+        y=(a*gru_out).sum(dim=0)   
         y=self.linear_third(y)  
+        LSTMModel.count += 1
         return y
 
 class CNNModel(nn.Module):
