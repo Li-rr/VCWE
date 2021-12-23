@@ -3,3 +3,7 @@ test/
 .vscode/
 __pycache__/
 *pyc
+*.log
+*.error
+*parame
+ray_results/
